@@ -490,36 +490,6 @@ function computeScore(
   return accuracy + proximity / distance
 }
 
-function convertMaskToIndices(
-  matchmask = [],
-  minMatchCharLength = Config.minMatchCharLength
-) {
-  let indices = [];
-  let start = -1;
-  let end = -1;
-  let i = 0;
-
-  for (let len = matchmask.length; i < len; i += 1) {
-    let match = matchmask[i];
-    if (match && start === -1) {
-      start = i;
-    } else if (!match && start !== -1) {
-      end = i - 1;
-      if (end - start + 1 >= minMatchCharLength) {
-        indices.push([start, end]);
-      }
-      start = -1;
-    }
-  }
-
-  // (i-1 - start) + 1 => i - start
-  if (matchmask[i - 1] && i - start >= minMatchCharLength) {
-    indices.push([start, i - 1]);
-  }
-
-  return indices
-}
-
 // Machine word size
 const MAX_BITS = 32;
 
@@ -554,10 +524,12 @@ function search(
   // Performance: only computer matches when the minMatchCharLength > 1
   // OR if `includeMatches` is true.
   const computeMatches = minMatchCharLength > 1 || includeMatches;
-  // A mask of the matches, used for building the indices
-  const matchMask = computeMatches ? Array(textLen) : [];
+  // // A mask of the matches, used for building the indices
+  // const matchMask = computeMatches ? Array(textLen) : []
 
   let index;
+
+  var trueIndices = [];
 
   // Get all exact matches, here for speed up
   while ((index = text.indexOf(pattern, bestLocation)) > -1) {
@@ -571,13 +543,13 @@ function search(
     currentThreshold = Math.min(score, currentThreshold);
     bestLocation = index + patternLen;
 
-    if (computeMatches) {
-      let i = 0;
-      while (i < patternLen) {
-        matchMask[index + i] = 1;
-        i += 1;
-      }
-    }
+    // if (computeMatches) {
+    //   let i = 0
+    //   while (i < patternLen) {
+    //     matchMask[index + i] = 1
+    //     i += 1
+    //   }
+    // }
   }
 
   // Reset the best location
@@ -631,10 +603,10 @@ function search(
       let currentLocation = j - 1;
       let charMatch = patternAlphabet[text.charAt(currentLocation)];
 
-      if (computeMatches) {
-        // Speed up: quick bool to int conversion (i.e, `charMatch ? 1 : 0`)
-        matchMask[currentLocation] = +!!charMatch;
-      }
+      // if (computeMatches) {
+      //   // Speed up: quick bool to int conversion (i.e, `charMatch ? 1 : 0`)
+      //   matchMask[currentLocation] = +!!charMatch
+      // }
 
       // First pass: exact match
       bitArr[j] = ((bitArr[j + 1] << 1) | 1) & charMatch;
@@ -653,6 +625,12 @@ function search(
           distance,
           ignoreLocation
         });
+
+        trueIndices.push([
+          currentLocation,
+          currentLocation + patternLen - 1,
+          levenshteinDistance(pattern, text.substr(currentLocation, patternLen))
+        ]);
 
         // This match will almost certainly be better than any existing match.
         // But check anyway.
@@ -695,15 +673,43 @@ function search(
   };
 
   if (computeMatches) {
-    const indices = convertMaskToIndices(matchMask, minMatchCharLength);
-    if (!indices.length) {
-      result.isMatch = false;
-    } else if (includeMatches) {
-      result.indices = indices;
-    }
+    // const indices = convertMaskToIndices(matchMask, minMatchCharLength)
+    // if (!indices.length) {
+    //   result.isMatch = false
+    // } else if (includeMatches) {
+    //   result.indices = indices
+    // }
+    trueIndices.sort((a, b) => {
+      const res = a[2] - b[2];
+      if (res === 0) {
+        return a[0] - b[0]
+      }
+      return res
+    });
+    result.indices = trueIndices;
   }
 
   return result
+}
+
+function levenshteinDistance(s, t) {
+  if (!s.length) return t.length
+  if (!t.length) return s.length
+  const arr = [];
+  for (let i = 0; i <= t.length; i++) {
+    arr[i] = [i];
+    for (let j = 1; j <= s.length; j++) {
+      arr[i][j] =
+        i === 0
+          ? j
+          : Math.min(
+              arr[i - 1][j] + 1,
+              arr[i][j - 1] + 1,
+              arr[i - 1][j - 1] + (s[j - 1] === t[i - 1] ? 0 : 1)
+            );
+    }
+  }
+  return arr[t.length][s.length]
 }
 
 function createPatternAlphabet(pattern) {

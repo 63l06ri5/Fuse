@@ -9,6 +9,44 @@
 
 'use strict';
 
+function ownKeys(object, enumerableOnly) {
+  var keys = Object.keys(object);
+
+  if (Object.getOwnPropertySymbols) {
+    var symbols = Object.getOwnPropertySymbols(object);
+
+    if (enumerableOnly) {
+      symbols = symbols.filter(function (sym) {
+        return Object.getOwnPropertyDescriptor(object, sym).enumerable;
+      });
+    }
+
+    keys.push.apply(keys, symbols);
+  }
+
+  return keys;
+}
+
+function _objectSpread2(target) {
+  for (var i = 1; i < arguments.length; i++) {
+    var source = arguments[i] != null ? arguments[i] : {};
+
+    if (i % 2) {
+      ownKeys(Object(source), true).forEach(function (key) {
+        _defineProperty(target, key, source[key]);
+      });
+    } else if (Object.getOwnPropertyDescriptors) {
+      Object.defineProperties(target, Object.getOwnPropertyDescriptors(source));
+    } else {
+      ownKeys(Object(source)).forEach(function (key) {
+        Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
+      });
+    }
+  }
+
+  return target;
+}
+
 function _typeof(obj) {
   "@babel/helpers - typeof";
 
@@ -62,40 +100,6 @@ function _defineProperty(obj, key, value) {
   return obj;
 }
 
-function ownKeys(object, enumerableOnly) {
-  var keys = Object.keys(object);
-
-  if (Object.getOwnPropertySymbols) {
-    var symbols = Object.getOwnPropertySymbols(object);
-    if (enumerableOnly) symbols = symbols.filter(function (sym) {
-      return Object.getOwnPropertyDescriptor(object, sym).enumerable;
-    });
-    keys.push.apply(keys, symbols);
-  }
-
-  return keys;
-}
-
-function _objectSpread2(target) {
-  for (var i = 1; i < arguments.length; i++) {
-    var source = arguments[i] != null ? arguments[i] : {};
-
-    if (i % 2) {
-      ownKeys(Object(source), true).forEach(function (key) {
-        _defineProperty(target, key, source[key]);
-      });
-    } else if (Object.getOwnPropertyDescriptors) {
-      Object.defineProperties(target, Object.getOwnPropertyDescriptors(source));
-    } else {
-      ownKeys(Object(source)).forEach(function (key) {
-        Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
-      });
-    }
-  }
-
-  return target;
-}
-
 function _inherits(subClass, superClass) {
   if (typeof superClass !== "function" && superClass !== null) {
     throw new TypeError("Super expression must either be null or a function");
@@ -133,7 +137,7 @@ function _isNativeReflectConstruct() {
   if (typeof Proxy === "function") return true;
 
   try {
-    Date.prototype.toString.call(Reflect.construct(Date, [], function () {}));
+    Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function () {}));
     return true;
   } catch (e) {
     return false;
@@ -151,6 +155,8 @@ function _assertThisInitialized(self) {
 function _possibleConstructorReturn(self, call) {
   if (call && (typeof call === "object" || typeof call === "function")) {
     return call;
+  } else if (call !== void 0) {
+    throw new TypeError("Derived constructors may only return object or undefined");
   }
 
   return _assertThisInitialized(self);
@@ -184,7 +190,7 @@ function _arrayWithoutHoles(arr) {
 }
 
 function _iterableToArray(iter) {
-  if (typeof Symbol !== "undefined" && Symbol.iterator in Object(iter)) return Array.from(iter);
+  if (typeof Symbol !== "undefined" && iter[Symbol.iterator] != null || iter["@@iterator"] != null) return Array.from(iter);
 }
 
 function _unsupportedIterableToArray(o, minLen) {
@@ -724,38 +730,6 @@ function computeScore(pattern) {
   return accuracy + proximity / distance;
 }
 
-function convertMaskToIndices() {
-  var matchmask = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : [];
-  var minMatchCharLength = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : Config.minMatchCharLength;
-  var indices = [];
-  var start = -1;
-  var end = -1;
-  var i = 0;
-
-  for (var len = matchmask.length; i < len; i += 1) {
-    var match = matchmask[i];
-
-    if (match && start === -1) {
-      start = i;
-    } else if (!match && start !== -1) {
-      end = i - 1;
-
-      if (end - start + 1 >= minMatchCharLength) {
-        indices.push([start, end]);
-      }
-
-      start = -1;
-    }
-  } // (i-1 - start) + 1 => i - start
-
-
-  if (matchmask[i - 1] && i - start >= minMatchCharLength) {
-    indices.push([start, i - 1]);
-  }
-
-  return indices;
-}
-
 // Machine word size
 var MAX_BITS = 32;
 
@@ -791,10 +765,11 @@ function search(text, pattern, patternAlphabet) {
   var bestLocation = expectedLocation; // Performance: only computer matches when the minMatchCharLength > 1
   // OR if `includeMatches` is true.
 
-  var computeMatches = minMatchCharLength > 1 || includeMatches; // A mask of the matches, used for building the indices
+  var computeMatches = minMatchCharLength > 1 || includeMatches; // // A mask of the matches, used for building the indices
+  // const matchMask = computeMatches ? Array(textLen) : []
 
-  var matchMask = computeMatches ? Array(textLen) : [];
-  var index; // Get all exact matches, here for speed up
+  var index;
+  var trueIndices = []; // Get all exact matches, here for speed up
 
   while ((index = text.indexOf(pattern, bestLocation)) > -1) {
     var score = computeScore(pattern, {
@@ -804,16 +779,13 @@ function search(text, pattern, patternAlphabet) {
       ignoreLocation: ignoreLocation
     });
     currentThreshold = Math.min(score, currentThreshold);
-    bestLocation = index + patternLen;
-
-    if (computeMatches) {
-      var i = 0;
-
-      while (i < patternLen) {
-        matchMask[index + i] = 1;
-        i += 1;
-      }
-    }
+    bestLocation = index + patternLen; // if (computeMatches) {
+    //   let i = 0
+    //   while (i < patternLen) {
+    //     matchMask[index + i] = 1
+    //     i += 1
+    //   }
+    // }
   } // Reset the best location
 
 
@@ -823,7 +795,7 @@ function search(text, pattern, patternAlphabet) {
   var binMax = patternLen + textLen;
   var mask = 1 << patternLen - 1;
 
-  for (var _i = 0; _i < patternLen; _i += 1) {
+  for (var i = 0; i < patternLen; i += 1) {
     // Scan for the best match; each iteration allows for one more error.
     // Run a binary search to determine how far from the match location we can stray
     // at this error level.
@@ -832,7 +804,7 @@ function search(text, pattern, patternAlphabet) {
 
     while (binMin < binMid) {
       var _score2 = computeScore(pattern, {
-        errors: _i,
+        errors: i,
         currentLocation: expectedLocation + binMid,
         expectedLocation: expectedLocation,
         distance: distance,
@@ -854,32 +826,31 @@ function search(text, pattern, patternAlphabet) {
     var finish = findAllMatches ? textLen : Math.min(expectedLocation + binMid, textLen) + patternLen; // Initialize the bit array
 
     var bitArr = Array(finish + 2);
-    bitArr[finish + 1] = (1 << _i) - 1;
+    bitArr[finish + 1] = (1 << i) - 1;
 
     for (var j = finish; j >= start; j -= 1) {
       var currentLocation = j - 1;
-      var charMatch = patternAlphabet[text.charAt(currentLocation)];
-
-      if (computeMatches) {
-        // Speed up: quick bool to int conversion (i.e, `charMatch ? 1 : 0`)
-        matchMask[currentLocation] = +!!charMatch;
-      } // First pass: exact match
-
+      var charMatch = patternAlphabet[text.charAt(currentLocation)]; // if (computeMatches) {
+      //   // Speed up: quick bool to int conversion (i.e, `charMatch ? 1 : 0`)
+      //   matchMask[currentLocation] = +!!charMatch
+      // }
+      // First pass: exact match
 
       bitArr[j] = (bitArr[j + 1] << 1 | 1) & charMatch; // Subsequent passes: fuzzy match
 
-      if (_i) {
+      if (i) {
         bitArr[j] |= (lastBitArr[j + 1] | lastBitArr[j]) << 1 | 1 | lastBitArr[j + 1];
       }
 
       if (bitArr[j] & mask) {
         finalScore = computeScore(pattern, {
-          errors: _i,
+          errors: i,
           currentLocation: currentLocation,
           expectedLocation: expectedLocation,
           distance: distance,
           ignoreLocation: ignoreLocation
-        }); // This match will almost certainly be better than any existing match.
+        });
+        trueIndices.push([currentLocation, currentLocation + patternLen - 1, levenshteinDistance(pattern, text.substr(currentLocation, patternLen))]); // This match will almost certainly be better than any existing match.
         // But check anyway.
 
         if (finalScore <= currentThreshold) {
@@ -899,7 +870,7 @@ function search(text, pattern, patternAlphabet) {
 
 
     var _score = computeScore(pattern, {
-      errors: _i + 1,
+      errors: i + 1,
       currentLocation: expectedLocation,
       expectedLocation: expectedLocation,
       distance: distance,
@@ -920,16 +891,41 @@ function search(text, pattern, patternAlphabet) {
   };
 
   if (computeMatches) {
-    var indices = convertMaskToIndices(matchMask, minMatchCharLength);
+    // const indices = convertMaskToIndices(matchMask, minMatchCharLength)
+    // if (!indices.length) {
+    //   result.isMatch = false
+    // } else if (includeMatches) {
+    //   result.indices = indices
+    // }
+    trueIndices.sort(function (a, b) {
+      var res = a[2] - b[2];
 
-    if (!indices.length) {
-      result.isMatch = false;
-    } else if (includeMatches) {
-      result.indices = indices;
-    }
+      if (res === 0) {
+        return a[0] - b[0];
+      }
+
+      return res;
+    });
+    result.indices = trueIndices;
   }
 
   return result;
+}
+
+function levenshteinDistance(s, t) {
+  if (!s.length) return t.length;
+  if (!t.length) return s.length;
+  var arr = [];
+
+  for (var i = 0; i <= t.length; i++) {
+    arr[i] = [i];
+
+    for (var j = 1; j <= s.length; j++) {
+      arr[i][j] = i === 0 ? j : Math.min(arr[i - 1][j] + 1, arr[i][j - 1] + 1, arr[i - 1][j - 1] + (s[j - 1] === t[i - 1] ? 0 : 1));
+    }
+  }
+
+  return arr[t.length][s.length];
 }
 
 function createPatternAlphabet(pattern) {
@@ -1102,9 +1098,7 @@ var BaseMatch = /*#__PURE__*/function () {
 
   _createClass(BaseMatch, [{
     key: "search",
-    value: function search()
-    /*text*/
-    {}
+    value: function search() {}
   }], [{
     key: "isMultiMatch",
     value: function isMultiMatch(pattern) {
@@ -1925,10 +1919,7 @@ var Fuse = /*#__PURE__*/function () {
     key: "remove",
     value: function remove() {
       var predicate = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : function () {
-        return (
-          /* doc, idx */
-          false
-        );
+        return false;
       };
       var results = [];
 

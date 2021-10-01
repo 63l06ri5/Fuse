@@ -35,10 +35,12 @@ export default function search(
   // Performance: only computer matches when the minMatchCharLength > 1
   // OR if `includeMatches` is true.
   const computeMatches = minMatchCharLength > 1 || includeMatches
-  // A mask of the matches, used for building the indices
-  const matchMask = computeMatches ? Array(textLen) : []
+  // // A mask of the matches, used for building the indices
+  // const matchMask = computeMatches ? Array(textLen) : []
 
   let index
+
+  var trueIndices = []
 
   // Get all exact matches, here for speed up
   while ((index = text.indexOf(pattern, bestLocation)) > -1) {
@@ -52,13 +54,13 @@ export default function search(
     currentThreshold = Math.min(score, currentThreshold)
     bestLocation = index + patternLen
 
-    if (computeMatches) {
-      let i = 0
-      while (i < patternLen) {
-        matchMask[index + i] = 1
-        i += 1
-      }
-    }
+    // if (computeMatches) {
+    //   let i = 0
+    //   while (i < patternLen) {
+    //     matchMask[index + i] = 1
+    //     i += 1
+    //   }
+    // }
   }
 
   // Reset the best location
@@ -112,10 +114,10 @@ export default function search(
       let currentLocation = j - 1
       let charMatch = patternAlphabet[text.charAt(currentLocation)]
 
-      if (computeMatches) {
-        // Speed up: quick bool to int conversion (i.e, `charMatch ? 1 : 0`)
-        matchMask[currentLocation] = +!!charMatch
-      }
+      // if (computeMatches) {
+      //   // Speed up: quick bool to int conversion (i.e, `charMatch ? 1 : 0`)
+      //   matchMask[currentLocation] = +!!charMatch
+      // }
 
       // First pass: exact match
       bitArr[j] = ((bitArr[j + 1] << 1) | 1) & charMatch
@@ -134,6 +136,12 @@ export default function search(
           distance,
           ignoreLocation
         })
+
+        trueIndices.push([
+          currentLocation,
+          currentLocation + patternLen - 1,
+          levenshteinDistance(pattern, text.substr(currentLocation, patternLen))
+        ])
 
         // This match will almost certainly be better than any existing match.
         // But check anyway.
@@ -176,13 +184,41 @@ export default function search(
   }
 
   if (computeMatches) {
-    const indices = convertMaskToIndices(matchMask, minMatchCharLength)
-    if (!indices.length) {
-      result.isMatch = false
-    } else if (includeMatches) {
-      result.indices = indices
-    }
+    // const indices = convertMaskToIndices(matchMask, minMatchCharLength)
+    // if (!indices.length) {
+    //   result.isMatch = false
+    // } else if (includeMatches) {
+    //   result.indices = indices
+    // }
+    trueIndices.sort((a, b) => {
+      const res = a[2] - b[2]
+      if (res === 0) {
+        return a[0] - b[0]
+      }
+      return res
+    })
+    result.indices = trueIndices
   }
 
   return result
+}
+
+function levenshteinDistance(s, t) {
+  if (!s.length) return t.length
+  if (!t.length) return s.length
+  const arr = []
+  for (let i = 0; i <= t.length; i++) {
+    arr[i] = [i]
+    for (let j = 1; j <= s.length; j++) {
+      arr[i][j] =
+        i === 0
+          ? j
+          : Math.min(
+              arr[i - 1][j] + 1,
+              arr[i][j - 1] + 1,
+              arr[i - 1][j - 1] + (s[j - 1] === t[i - 1] ? 0 : 1)
+            )
+    }
+  }
+  return arr[t.length][s.length]
 }
